@@ -18,6 +18,7 @@ contract MinimalBoltzSmartWallet {
      * @param feesAmount - Amount to pay
      * @param feesGas - Gas limit of payment
      * @param to - Destination contract to execute
+     * @param gasLimit - Gas limit to forward to destination contract execution
      * @param data - Data to be execute by destination contract
      */
     function initialize(
@@ -26,6 +27,7 @@ contract MinimalBoltzSmartWallet {
         uint256 feesAmount,
         uint256 feesGas,
         address to,
+        uint256 gasLimit,
         bytes calldata data
     ) external {
         require(!_isInitialized, "Already initialized");
@@ -38,7 +40,11 @@ contract MinimalBoltzSmartWallet {
         bytes memory ret;
         // Although this check isn't strictly necessary, it's included to improve the transaction estimation
         if (to != address(0)) {
-            (success, ret) = to.call(data);
+            if (gasLimit == 0) {
+                (success, ret) = to.call(data);
+            } else {
+                (success, ret) = to.call{gas: gasLimit}(data);
+            }
             if (!success) {
                 if (ret.length == 0) revert("Unable to execute");
                 assembly {

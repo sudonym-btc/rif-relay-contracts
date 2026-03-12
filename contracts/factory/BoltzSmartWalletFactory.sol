@@ -42,15 +42,16 @@ contract BoltzSmartWalletFactory is
             "Invalid signature"
         );
 
-        //c07adbdc  => initialize(address owner,address tokenContract,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,uint256 value,bytes calldata data)
+        //88903efe  => initialize(address owner,address tokenContract,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,uint256 value,uint256 gasLimit,bytes calldata data)
         bytes memory initData = abi.encodeWithSelector(
-            hex"c07adbdc",
+            hex"88903efe",
             owner,
             address(0), // This "gas-funded" call does not pay with tokens
             address(0),
             0,
             0, //No token transfer,
             address(0),
+            0,
             0,
             ""
         );
@@ -79,14 +80,14 @@ contract BoltzSmartWalletFactory is
         );
         _nonces[req.from]++;
 
-        //c07adbdc  => initialize(address owner,address tokenContract,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,uint256 value,bytes calldata data)
+        //88903efe  => initialize(address owner,address tokenContract,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,uint256 value,uint256 gasLimit,bytes calldata data)
         _deploy(
             getCreationBytecode(),
             keccak256(
                 abi.encodePacked(req.from, req.recoverer, req.index) // salt
             ),
             abi.encodeWithSelector(
-                hex"c07adbdc",
+                hex"88903efe",
                 req.from,
                 req.tokenContract,
                 feesReceiver,
@@ -94,6 +95,7 @@ contract BoltzSmartWalletFactory is
                 req.tokenGas,
                 req.to,
                 req.value,
+                req.gas,
                 req.data
             )
         );

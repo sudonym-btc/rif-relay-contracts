@@ -37,19 +37,20 @@ contract MinimalBoltzSmartWalletFactory is
         );
         _nonces[req.from]++;
 
-        // 3d326736  => initialize(address owner,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,bytes calldata data)
+        // 9f18fa5a  => initialize(address owner,address feesReceiver,uint256 tokenAmount,uint256 tokenGas,address to,uint256 gasLimit,bytes calldata data)
         _deploy(
             getCreationBytecode(),
             keccak256(
                 abi.encodePacked(req.from, req.recoverer, req.index) // salt
             ),
             abi.encodeWithSelector(
-                hex"3d326736",
+                hex"9f18fa5a",
                 req.from,
                 feesReceiver,
                 req.tokenAmount,
                 req.tokenGas,
                 req.to,
+                req.gas,
                 req.data
             )
         );

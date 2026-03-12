@@ -8,6 +8,60 @@ import "./BaseSmartWallet.sol";
 /* solhint-disable avoid-low-level-calls */
 
 contract BoltzSmartWallet is BaseSmartWallet {
+    function _payFees(
+        address tokenContract,
+        address feesReceiver,
+        uint256 tokenAmount,
+        uint256 tokenGas,
+        string memory errorMessage
+    ) internal {
+        bool success;
+        bytes memory ret;
+
+        if (tokenContract == address(0)) {
+            (success, ret) = payable(feesReceiver).call{
+                value: tokenAmount,
+                gas: tokenGas
+            }("");
+        } else {
+            (success, ret) = tokenContract.call{gas: tokenGas}(
+                abi.encodeWithSelector(
+                    hex"a9059cbb", // transfer(address,uint256)
+                    feesReceiver,
+                    tokenAmount
+                )
+            );
+        }
+
+        require(
+            success && (ret.length == 0 || abi.decode(ret, (bool))),
+            errorMessage
+        );
+    }
+
+    function _executeTarget(
+        address to,
+        uint256 value,
+        uint256 gasLimit,
+        bytes memory data
+    ) internal returns (bool success, bytes memory ret) {
+        if (gasLimit == 0) {
+            return to.call{value: value}(data);
+        }
+
+        return to.call{gas: gasLimit, value: value}(data);
+    }
+
+    function _revertWithReturnData(
+        bytes memory ret,
+        string memory errorMessage
+    ) internal pure {
+        if (ret.length == 0) revert(errorMessage);
+        assembly {
+            revert(add(ret, 32), mload(ret))
+        }
+    }
+
     function execute(
         bytes32 suffixData,
         ForwardRequest memory req,
@@ -24,36 +78,22 @@ contract BoltzSmartWallet is BaseSmartWallet {
         require(msg.sender == req.relayHub, "Invalid caller");
 
         _verifySig(suffixData, req, sig);
+        /* solhint-disable not-rely-on-time */
         require(
             req.validUntilTime == 0 || req.validUntilTime > block.timestamp,
             "SW: request expired"
         );
+        /* solhint-enable not-rely-on-time */
         nonce++;
 
         (success, ret) = req.to.call{gas: req.gas, value: req.value}(req.data);
 
         if (req.tokenAmount > 0) {
-            bool successPayment;
-            bytes memory retPayment;
-            if (req.tokenContract == address(0)) {
-                (successPayment, retPayment) = payable(feesReceiver).call{
-                    value: req.tokenAmount,
-                    gas: req.tokenGas
-                }("");
-            } else {
-                (successPayment, retPayment) = req.tokenContract.call{
-                    gas: req.tokenGas
-                }(
-                    abi.encodeWithSelector(
-                        hex"a9059cbb", //transfer(address,uint256)
-                        feesReceiver,
-                        req.tokenAmount
-                    )
-                );
-            }
-            require(
-                successPayment &&
-                    (retPayment.length == 0 || abi.decode(retPayment, (bool))),
+            _payFees(
+                req.tokenContract,
+                feesReceiver,
+                req.tokenAmount,
+                req.tokenGas,
                 "Unable to pay for relay"
             );
         }
@@ -76,6 +116,7 @@ contract BoltzSmartWallet is BaseSmartWallet {
      * @param tokenGas - Gas limit of payment
      * @param to - Destination contract to execute
      * @param value - Value to send to destination contract
+     * @param gasLimit - Gas limit to forward to destination contract execution
      * @param data - Data to be execute by destination contract
      */
     function initialize(
@@ -86,42 +127,32 @@ contract BoltzSmartWallet is BaseSmartWallet {
         uint256 tokenGas,
         address to,
         uint256 value,
+        uint256 gasLimit,
         bytes calldata data
     ) external {
         require(getOwner() == bytes32(0), "Already initialized");
 
         _setOwner(owner);
 
-        bool success;
-        bytes memory ret;
         // Although this check isn't strictly necessary, it's included to improve the transaction estimation
         if (to != address(0)) {
-            (success, ret) = to.call{value: value}(data);
+            (bool success, bytes memory ret) = _executeTarget(
+                to,
+                value,
+                gasLimit,
+                data
+            );
             if (!success) {
-                if (ret.length == 0) revert("Unable to execute");
-                assembly {
-                    revert(add(ret, 32), mload(ret))
-                }
+                _revertWithReturnData(ret, "Unable to execute");
             }
         }
 
         if (tokenAmount > 0) {
-            if (tokenContract == address(0)) {
-                (success, ret) = payable(feesReceiver).call{
-                    value: tokenAmount,
-                    gas: tokenGas
-                }("");
-            } else {
-                (success, ret) = tokenContract.call{gas: tokenGas}(
-                    abi.encodeWithSelector(
-                        hex"a9059cbb", // transfer(address,uint256)
-                        feesReceiver,
-                        tokenAmount
-                    )
-                );
-            }
-            require(
-                success && (ret.length == 0 || abi.decode(ret, (bool))),
+            _payFees(
+                tokenContract,
+                feesReceiver,
+                tokenAmount,
+                tokenGas,
                 "Unable to pay for deployment"
             );
         }
